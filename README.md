@@ -13,7 +13,7 @@ SW 建模时 SolidWorks 的 COM 在受限沙箱下无法工作（`CO_E_SERVER_EX
 > Safe, narrow auto-approval for SolidWorks workflows in DSH. It never disables the sandbox
 > or the approval system globally: only strictly allowlisted SolidWorks escalations are
 > auto-approved, everything else fails closed to the human prompt.
-
+如果这个插件帮到了你，欢迎点个⭐Star
 ---
 
 ## ✨ 功能
