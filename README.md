@@ -18,7 +18,7 @@ SW 建模时 SolidWorks 的 COM 在受限沙箱下无法工作（`CO_E_SERVER_EX
 
 ## ✨ 功能
 
-- **只对工程模式（关于工程模式请看https://github.com/fyjgtddco/DSH-SW-and-CAD）会话生效**，其它会话完全不受影响。
+- **只对工程模式（关于工程模式请看 https://github.com/fyjgtddco/DSH-SW-and-CAD ）会话生效**，其它会话完全不受影响。
 - 自动放行对象仅限 `pwsh` / `write` / `edit` 的 **`danger-full-access` 提权**。
 - 判定依据是会话日志里**真实的 `tool/call` 参数**，不是模型写的 justification。
 - SW 证据必须是**可操作证据**：受信任脚本、启动 `SLDWORKS.exe`、`SldWorks.Application` COM、
