@@ -31,6 +31,47 @@ SW 建模时 SolidWorks 的 COM 在受限沙箱下无法工作（`CO_E_SERVER_EX
 - 本地审计日志 + `/swapproval` 命令（status / on / off / log / rehash）。
 - 判定异常、字段缺失、解析失败 → **一律 fail-closed 交还人工审批**。
 
+## ⚡ 快速上手
+
+### 1. 执行安装命令
+
+把仓库 clone 到任意位置后，用 DSH 自带 CLI 安装到 `desktop` profile（路径换成你的实际路径）：
+
+```powershell
+"D:\dsh guanfnag\resources\runtime\cli\bin\dsh.cmd" plugin --profile desktop add "C:\path\to\dsh-sw-approval"
+```
+
+<details>
+<summary>其它安装方式</summary>
+
+- **应用内安装**：在 DSH 对话里让 Agent 调用
+  `plugin_manager { action: "install_bundle", target: "<绝对路径>/dsh-sw-approval" }`
+- **直接放目录**：把仓库目录放进 `%USERPROFILE%\.dsh\profiles\desktop\node_modules\dsh-sw-approval`，
+  并在该 profile 的 `package.json` 中把 `dsh-sw-approval` 加进 `dependencies` 与 `dsh.profile.bundles`。
+
+</details>
+
+### 2. 重启 DSH 桌面端
+
+宿主插件是**进程级配置**，安装后必须完全退出并重新启动 DSH 桌面端才生效。
+重启后可以在任意会话输入 `/swapproval status` 自检，看到下面这两行就说明装好了：
+
+```
+SW 安全自动审批（dsh-sw-approval）
+  受信任脚本哈希：9 个
+  Python 解释器：C:\Users\<你>\...\Python312\python.exe
+```
+
+### 3. 新建会话，切换到【工程模式】，开始 SW 建模
+
+新建会话后在顶部把 **Agent 预设** 切到 **工程模式（engineering）**，然后直接描述建模任务，例如
+「画一个 11mm 的正方形并导出 CAD 图纸」。符合白名单的命令会被自动放行，不再逐步弹窗。
+
+> 插件默认**只对工程模式生效**。standard 等其它预设下所有审批照旧弹窗——这是刻意的安全设计。
+> 可以先 `/swapproval status` 确认「当前会话预设：engineering」。
+
+---
+
 ## 🔒 安全模型（摘要）
 
 | 闸门 | 规则 |
