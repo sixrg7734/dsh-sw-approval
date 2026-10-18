@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "SW Safe Auto-Approval",
+    "description": "Auto-approves danger-full-access escalation only for strict SolidWorks whitelisted commands in engineering-preset sessions; every other approval still asks. Includes /swapproval status/off/on/log and a local audit log."
+  }
+}

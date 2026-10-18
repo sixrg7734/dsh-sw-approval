@@ -1,0 +1,930 @@
+[
+ {
+  "n": 1,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\npython -u \"$R\\tools\\mode_gate.py\" room-fail \"物理深挖房\"\npython -u \"$R\\tools\\mode_gate.py\" room-fail \"流程深挖房\"\n\"===== 校验 =====\"\npython -c \"import json;d=json.load(open(r'$R\\tools\\mode_state.json',encoding='utf-8'));act=[k for k,v in d['rooms'].items() if v.get('active')];print('active_rooms=',act)\""
+ },
+ {
+  "n": 2,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\npython -u \"$R\\tools\\workflow_gate.py\" reset\n\"===== gate-summary =====\"\npython -u \"$R\\tools\\workflow_gate.py\" gate-summary"
+ },
+ {
+  "n": 3,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "Write-Output (\"=== launch with full access \" + (Get-Date -Format HH:mm:ss) + \" ===\")\n$p = Start-Process -FilePath \"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\" -PassThru\nWrite-Output (\"pid=\" + $p.Id)\nfor ($i=0; $i -lt 24; $i++) {\n  Start-Sleep -Seconds 5\n  if ($p.HasExited) { Write-Output (\"[\" + (Get-Date -Format HH:mm:ss) + \"] EXITED code=\" + $p.ExitCode); break }\n  $proc = Get-Process -Id $p.Id -ErrorAction SilentlyContinue\n  if ($proc) { Write-Output (\"[\" + (Get-Date -Format HH:mm:ss) + \"] alive mem=\" + [math]::Round($proc.WorkingSet64/1MB,0) + \"MB title='\" + $proc.MainWindowTitle + \"'\") }\n}\nWrite-Output \"--- procs ---\"\nGet-Process | Where-Object { $_.ProcessName -match 'SLDWORKS' } | Select-Object ProcessName,Id,MainWindowTitle | Format-Table -AutoSize | Out-String -Width 200"
+ },
+ {
+  "n": 4,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "Write-Output (\"=== COM attempt at \" + (Get-Date -Format HH:mm:ss) + \" ===\")\nWrite-Output \"SW procs:\"\nGet-Process -Name SLDWORKS -ErrorAction SilentlyContinue | Select-Object Id,MainWindowTitle | Format-Table -AutoSize | Out-String -Width 200\ntry {\n  $sw = New-Object -ComObject SldWorks.Application\n  Write-Output (\"DISPATCH_OK rev=\" + $sw.RevisionNumber)\n  Write-Output (\"BuildNumbers=\" + $sw.GetBuildNumbers2())\n  Write-Output (\"Visible=\" + $sw.Visible + \" docs=\" + $sw.GetDocumentCount())\n  $sw.Visible = $true\n  Write-Output \"--- user prefs / units ---\"\n  Write-Output (\"UserUnitSystem=\" + $sw.GetUserPreferenceIntegerValue(8))\n} catch {\n  Write-Output (\"COM_FAIL: \" + $_.Exception.Message)\n}"
+ },
+ {
+  "n": 5,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$ErrorActionPreference='Continue'\ntry {\n  $sw = New-Object -ComObject SldWorks.Application\n  Write-Output (\"created, type=\" + $sw.GetType().FullName)\n  Write-Output (\"Caption=\" + ($sw.Caption -join ''))\n  Write-Output (\"Visible=\" + $sw.Visible)\n  Write-Output (\"GetDocumentCount=\" + $sw.GetDocumentCount())\n  Write-Output \"--- common props ---\"\n  foreach ($p in @('RevisionNumber','VersionMajor','VersionMinor','IsBackground')) {\n    try { Write-Output (\"$p = \" + $sw.$p) } catch { Write-Output (\"$p ERR: \" + $_.Exception.Message.Substring(0,60)) }\n  }\n  Write-Output \"--- templates ---\"\n  Write-Output (\"UserTemplatePath(part)=\" + $sw.GetUserPreferenceStringValue(8))\n  Write-Output (\"DefaultTemplate(part)=\" + $sw.GetUserPreferenceStringValue(8))\n} catch { Write-Output (\"FAIL: \" + $_.Exception.Message) }"
+ },
+ {
+  "n": 6,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$ErrorActionPreference='Continue'\nWrite-Output \"=== SW process integrity ===\"\n$procs = Get-Process -Name SLDWORKS -ErrorAction SilentlyContinue\nforeach ($pr in $procs) { Write-Output (\"pid=\" + $pr.Id + \" title='\" + $pr.MainWindowTitle + \"'\") }\nWrite-Output \"=== registry ProgIDs ===\"\n$verRoot = \"Registry::HKEY_CLASSES_ROOT\"\n$guids = Get-ChildItem \"$verRoot\\CLSID\" -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -eq '{666AAEE2-7A21-40FC-B768-2078840A88C3}' }\nif ($guids) { Get-ChildItem $guids.PSPath -Recurse -ErrorAction SilentlyContinue | Select-Object -First 20 Name | Format-Table -AutoSize | Out-String -Width 200 }\nWrite-Output \"=== versioned ProgIDs ===\"\nGet-ChildItem \"$verRoot\" -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -like 'SldWorks.Application*' } | Select-Object PSChildName | Format-Table -AutoSize | Out-String -Width 200\nWrite-Output \"=== LocalServer32 ===\"\nGet-ItemProperty \"$verRoot\\CLSID\\{666AAEE2-7A21-40FC-B768-2078840A88C3}\\LocalServer32\" -ErrorAction SilentlyContinue | Format-List | Out-String -Width 300\nWrite-Output \"=== AppID / RunAs ===\"\n$appid = Get-ItemProperty \"$verRoot\\CLSID\\{666AAEE2-7A21-40FC-B768-2078840A88C3}\" -ErrorAction SilentlyContinue\nif ($appid) { Write-Output (\"AppID=\" + $appid.AppID) }\nGet-ChildItem \"$verRoot\\AppID\" -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -eq '{666AAEE2-7A21-40FC-B768-2078840A88C3}' } | Select-Object PSChildName"
+ },
+ {
+  "n": 7,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$ErrorActionPreference='Continue'\nWrite-Output \"=== close existing SW ===\"\nGet-Process -Name SLDWORKS -ErrorAction SilentlyContinue | Stop-Process -Force\nStart-Sleep -Seconds 4\nWrite-Output \"closed. remaining:\" (Get-Process -Name SLDWORKS -ErrorAction SilentlyContinue | Measure-Object).Count\n\nWrite-Output \"=== fresh launch + versioned ProgID ===\"\n$p = Start-Process -FilePath \"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\" -PassThru\nWrite-Output (\"pid=\" + $p.Id)\nStart-Sleep -Seconds 45\n$proc = Get-Process -Id $p.Id -ErrorAction SilentlyContinue\nWrite-Output (\"alive=\" + (-not $p.HasExited) + \" title='\" + $proc.MainWindowTitle + \"'\")\n\nforeach ($prog in @('SldWorks.Application.34','SldWorks.Application')) {\n  Write-Output (\"--- try \" + $prog + \" ---\")\n  try {\n    $sw = New-Object -ComObject $prog\n    Write-Output (\"  created OK\")\n    Write-Output (\"  RevisionNumber=\" + $sw.RevisionNumber)\n    Write-Output (\"  Visible=\" + $sw.Visible)\n    Write-Output (\"  GetDocumentCount=\" + $sw.GetDocumentCount())\n    break\n  } catch { Write-Output (\"  ERR: \" + $_.Exception.Message) }\n}"
+ },
+ {
+  "n": 8,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$ErrorActionPreference='Continue'\n$cls = \"Registry::HKEY_CLASSES_ROOT\\CLSID\\{666AAEE2-7A21-40FC-B768-2078840A88C3}\"\nWrite-Output \"=== InprocHandler32 ===\"\nGet-ItemProperty \"$cls\\InprocHandler32\" -ErrorAction SilentlyContinue | Format-List | Out-String -Width 300\nWrite-Output \"=== TypeLib value ===\"\n$tl = Get-ItemProperty \"$cls\\TypeLib\" -ErrorAction SilentlyContinue\nif ($tl) { Write-Output (\"TypeLib GUID = \" + $tl.'(default)') }\nWrite-Output \"=== Version ===\"\nGet-ItemProperty \"$cls\" -ErrorAction SilentlyContinue | Select-Object '(default)','AppID','LocalizedString' | Format-List | Out-String -Width 300\nWrite-Output \"=== TypeLib registration check ===\"\nforeach ($v in @('Registry::HKEY_CLASSES_ROOT\\TypeLib','Registry::HKEY_CLASSES_ROOT\\WOW6432Node\\TypeLib')) {\n  Write-Output (\"under \" + $v)\n  $node = \"$v\\{83A33D31-27C5-11CE-BFD4-00400513BB57}\"\n  if (Test-Path $node) { Get-ChildItem $node -Recurse -ErrorAction SilentlyContinue | Select-Object -First 10 Name | Format-Table -AutoSize | Out-String -Width 250 } else { Write-Output \"  (not present)\" }\n}\nWrite-Output \"=== reflection invoke test ===\"\ntry {\n  $t = [System.Type]::GetTypeFromProgID(\"SldWorks.Application\")\n  $sw = [System.Activator]::CreateInstance($t)\n  Write-Output (\"instance type: \" + $sw.GetType().FullName)\n  $r = $t.InvokeMember(\"RevisionNumber\", [System.Reflection.BindingFlags]::GetProperty, $null, $sw, $null)\n  Write-Output (\"RevisionNumber via reflection = \" + $r)\n} catch { Write-Output (\"REFLECT_FAIL: \" + $_.Exception.Message) }"
+ },
+ {
+  "n": 9,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$ErrorActionPreference='Continue'\nWrite-Output \"=== typelib win64 path (64-bit) ===\"\n$tlp = \"Registry::HKEY_CLASSES_ROOT\\TypeLib\\{83A33D31-27C5-11CE-BFD4-00400513BB57}\\22.0\\0\\win64\"\nGet-ItemProperty $tlp -ErrorAction SilentlyContinue | Format-List | Out-String -Width 300\nWrite-Output \"=== does the typelib file exist? ===\"\n$v = (Get-ItemProperty $tlp -ErrorAction SilentlyContinue).'(default)'\nWrite-Output (\"path = \" + $v)\nif ($v) { Write-Output (\"exists = \" + (Test-Path $v)) }\nWrite-Output \"=== control test: another COM object (Shell.Application) ===\"\ntry {\n  $sh = New-Object -ComObject Shell.Application\n  Write-Output (\"Shell OK, Windows count=\" + $sh.Windows().Count)\n} catch { Write-Output (\"Shell FAIL: \" + $_.Exception.Message) }\nWrite-Output \"=== control test: Excel-like Scripting.Dictionary ===\"\ntry {\n  $d = New-Object -ComObject Scripting.Dictionary\n  Write-Output (\"Dict OK Count=\" + $d.Count)\n} catch { Write-Output (\"Dict FAIL: \" + $_.Exception.Message) }\nWrite-Output \"=== control: SldWorks type members count via IDispatch ===\"\ntry {\n  $t = [System.Type]::GetTypeFromProgID(\"SldWorks.Application\")\n  Write-Output (\"type name=\" + $t.FullName + \" isCOM=\" + $t.IsCOMObject)\n} catch { Write-Output (\"type err: \" + $_.Exception.Message) }"
+ },
+ {
+  "n": 10,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$ErrorActionPreference='Continue'\nWrite-Output \"=== try OpenDoc / get Easter egg via late bind with explicit args ===\"\ntry {\n  $sw = New-Object -ComObject SldWorks.Application\n  Write-Output \"created\"\n  # Try invoking a method that exists in every IDispatch: GetTypeInfoCount via IDispatch is internal\n  # Try to get the app caption with explicit invoke\n  $res = $sw.GetType().InvokeMember(\"Caption\", [System.Reflection.BindingFlags]::GetProperty, $null, $sw, $null)\n  Write-Output (\"Caption=\" + $res)\n} catch { Write-Output (\"caption fail: \" + $_.Exception.Message) }\nWrite-Output \"=== check for SolidWorks macro / API DLLs ===\"\nGet-ChildItem \"D:\\SolidWorks 2026\\SOLIDWORKS\" -Include \"*.tlb\",\"*.dll\" -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'sldworks|swcommands|swpublished|swconst' } | Select-Object Name,Length | Format-Table -AutoSize | Out-String -Width 250\nWrite-Output \"=== API SDK dirs ===\"\nGet-ChildItem \"D:\\SolidWorks 2026\" -Directory -ErrorAction SilentlyContinue | Select-Object Name\nWrite-Output \"=== is there a api/sdk folder ===\"\nGet-ChildItem \"D:\\SolidWorks 2026\\api\" -Recurse -Depth 1 -ErrorAction SilentlyContinue | Select-Object -First 20 FullName"
+ },
+ {
+  "n": 11,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$ErrorActionPreference='Continue'\nWrite-Output \"=== check running SW readiness strictly ===\"\nGet-Process -Name SLDWORKS -ErrorAction SilentlyContinue | Select-Object Id,MainWindowTitle,StartTime | Format-Table -AutoSize | Out-String -Width 250\nWrite-Output \"=== wait longer then retry COM (60s) ===\"\nfor ($i=1; $i -le 6; $i++) {\n  Start-Sleep -Seconds 10\n  try {\n    $sw = New-Object -ComObject SldWorks.Application\n    $r =  $sw.RevisionNumber\n    Write-Output (\"attempt \" + $i + \": OK rev=\" + $r)\n    Write-Output (\"Visible=\" + $sw.Visible + \" docs=\" + $sw.GetDocumentCount())\n    break\n  } catch { Write-Output (\"attempt \" + $i + \": \" + $_.Exception.Message.Substring(0,70)) }\n}"
+ },
+ {
+  "n": 12,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "rejected",
+  "command": "$ErrorActionPreference='Continue'\nWrite-Output \"=== check tlb validity / try registering ===\"\n$py = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n& $py -c \"\nimport pathlib\np = pathlib.Path(r'D:\\SolidWorks 2026\\SOLIDWORKS\\sldworks.tlb')\nprint('size', p.stat().st_size)\nb = p.open('rb').read(64)\nprint('magic', b[:8].hex(), b[:4])\n\" 2>&1\nWrite-Output \"=== SOLIDWORKS dir: tlb files ===\"\nGet-ChildItem \"D:\\SolidWorks 2026\\SOLIDWORKS\" -Filter \"*.tlb\" -ErrorAction SilentlyContinue | Select-Object Name,Length | Format-Table -AutoSize | Out-String -Width 250\nWrite-Output \"=== try a DIFFERENT well-known SW automation approach: check if sw commands work via late binding differently ===\"\ntry {\n  $t = [System.Type]::GetTypeFromCLSID('666AAEE2-7A21-40FC-B768-2078840A88C3')\n  $sw = [System.Activator]::CreateInstance($t)\n  Write-Output (\"CREATED via CLSID, type=\" + $sw.GetType().Name)\n  Write-Output (\"Try GetUserPreferenceIntegerValue...\")\n  $v = $sw.GetUserPreferenceIntegerValue(8)\n  Write-Output (\"units code = \" + $v)\n} catch { Write-Output (\"CLSID_ERR: \" + $_.Exception.Message) }"
+ },
+ {
+  "n": 13,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "corepack enable pnpm 2>&1; echo \"exit=$LASTEXITCODE\"; corepack prepare pnpm@latest --activate 2>&1 | Select-Object -Last 5; echo \"after: $((Get-Command pnpm -ErrorAction SilentlyContinue).Source)\"; (pnpm -v) 2>&1"
+ },
+ {
+  "n": 14,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "cmd /c \"npm install --global pnpm@latest 2>&1\" | Select-Object -Last 8; echo \"exit=$LASTEXITCODE\"; cmd /c \"pnpm -v 2>&1\" | Select-Object -Last 3"
+ },
+ {
+  "n": 15,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "cmd /c \"npm install --global pnpm@12.4.2 2>&1\" | Select-Object -Last 10; echo \"exit=$LASTEXITCODE\"; echo \"== bins ==\"; Get-ChildItem \"__HOME__\\AppData\\Roaming\\npm\" -Filter \"pnpm*\" -ErrorAction SilentlyContinue | Select-Object Name; echo \"== version ==\"; cmd /c \"pnpm -v 2>&1\""
+ },
+ {
+  "n": 16,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$env:COREPACK_ENABLE_STRICT='0'; $bin=\"__HOME__\\AppData\\Local\\npm-cache\\_npx\\1e7f6d9597241db0\\node_modules\\@deepseek-ai\\dsh\\lib\\bin.js\"; cmd /c \"node `\"$bin`\" plugin --profile web add dshmarket 2>&1\" | Select-Object -Last 40; echo \"exit=$LASTEXITCODE\""
+ },
+ {
+  "n": 17,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$p=\"$env:USERPROFILE\\.dsh\\profiles\\web\"; $env:COREPACK_ENABLE_STRICT='0'; cmd /c \"cd /d `\"$p`\" && pnpm peers check 2>&1\" | Select-Object -Last 30"
+ },
+ {
+  "n": 18,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$p=\"$env:USERPROFILE\\.dsh\\profiles\\web\"; $env:COREPACK_ENABLE_STRICT='0'; cmd /c \"cd /d `\"$p`\" && pnpm peers check 2>&1\" | Out-String"
+ },
+ {
+  "n": 19,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$bin=\"__HOME__\\AppData\\Local\\npm-cache\\_npx\\1e7f6d9597241db0\\node_modules\\@deepseek-ai\\dsh\\lib\\bin.js\"; cmd /c \"node `\"$bin`\" --profile web --dump-config 2>&1\" | Select-String -Pattern \"dshmarket|market\" | Select-Object -First 20; echo \"exit=$LASTEXITCODE\""
+ },
+ {
+  "n": 20,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "corepack enable pnpm 2>&1; echo \"exit=$LASTEXITCODE\"; corepack prepare pnpm@latest --activate 2>&1 | Select-Object -Last 5; echo \"after: $((Get-Command pnpm -ErrorAction SilentlyContinue).Source)\"; (pnpm -v) 2>&1"
+ },
+ {
+  "n": 21,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "cmd /c \"npm install --global pnpm@latest 2>&1\" | Select-Object -Last 8; echo \"exit=$LASTEXITCODE\"; cmd /c \"pnpm -v 2>&1\" | Select-Object -Last 3"
+ },
+ {
+  "n": 22,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "cmd /c \"npm install --global pnpm@12.4.2 2>&1\" | Select-Object -Last 10; echo \"exit=$LASTEXITCODE\"; echo \"== bins ==\"; Get-ChildItem \"__HOME__\\AppData\\Roaming\\npm\" -Filter \"pnpm*\" -ErrorAction SilentlyContinue | Select-Object Name; echo \"== version ==\"; cmd /c \"pnpm -v 2>&1\""
+ },
+ {
+  "n": 23,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$env:COREPACK_ENABLE_STRICT='0'; $bin=\"__HOME__\\AppData\\Local\\npm-cache\\_npx\\1e7f6d9597241db0\\node_modules\\@deepseek-ai\\dsh\\lib\\bin.js\"; cmd /c \"node `\"$bin`\" plugin --profile web add dshmarket 2>&1\" | Select-Object -Last 40; echo \"exit=$LASTEXITCODE\""
+ },
+ {
+  "n": 24,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$p=\"$env:USERPROFILE\\.dsh\\profiles\\web\"; $env:COREPACK_ENABLE_STRICT='0'; cmd /c \"cd /d `\"$p`\" && pnpm peers check 2>&1\" | Select-Object -Last 30"
+ },
+ {
+  "n": 25,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$p=\"$env:USERPROFILE\\.dsh\\profiles\\web\"; $env:COREPACK_ENABLE_STRICT='0'; cmd /c \"cd /d `\"$p`\" && pnpm peers check 2>&1\" | Out-String"
+ },
+ {
+  "n": 26,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$bin=\"__HOME__\\AppData\\Local\\npm-cache\\_npx\\1e7f6d9597241db0\\node_modules\\@deepseek-ai\\dsh\\lib\\bin.js\"; cmd /c \"node `\"$bin`\" --profile web --dump-config 2>&1\" | Select-String -Pattern \"dshmarket|market\" | Select-Object -First 20; echo \"exit=$LASTEXITCODE\""
+ },
+ {
+  "n": 27,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$exe=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru\n\"started pid=$($p.Id)\"\nfor ($i=0; $i -lt 40; $i++) {\n  Start-Sleep 3\n  if ($p.HasExited) { \"EXITED at $($i*3)s codes=$($p.ExitCode)\"; break }\n}\nif (-not $p.HasExited) { \"STILL RUNNING at 120s pid=$($p.Id) mem=$([math]::Round((Get-Process -Id $p.Id).WorkingSet64/1MB))MB title=$((Get-Process -Id $p.Id).MainWindowTitle)\" }"
+ },
+ {
+  "n": 28,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\nGet-Process SLDWORKS -ErrorAction SilentlyContinue | Select-Object Id,@{n='MB';e={[math]::Round($_.WorkingSet64/1MB)}} | Format-Table -AutoSize | Out-String -Width 80\n& $PY -c \"import win32com.client\ntry:\n    sw = win32com.client.Dispatch('SldWorks.Application')\n    print('DISPATCH OK rev=', sw.RevisionNumber)\nexcept Exception as e:\n    print('ERR', e)\n\" 2>&1 | Select-Object -Last 6"
+ },
+ {
+  "n": 29,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\build_square.py\" 2>&1 | Select-Object -Last 30"
+ },
+ {
+  "n": 30,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\build_square.py\" 2>&1 | ConvertFrom-Json | Select-Object ok,error | Format-List\n\"--- material json ---\"\n& $PY -c \"import json,io,os\np=r'__HOME__\\Desktop\\dsh\\DSH_正方形.SLDPRT.material.json'\nprint('EXISTS', os.path.exists(p))\nif os.path.exists(p):\n    d=json.load(io.open(p,encoding='utf-8'))\n    print({k:d.get(k) for k in ('material','density_kg_m3','signed','signature') if k in d})\n\""
+ },
+ {
+  "n": 31,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\build_square.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }"
+ },
+ {
+  "n": 32,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n$env:PYTHONIOENCODING=\"utf-8\"\n& $PY -c @\"\nimport sys; sys.path.insert(0, r'$R\\tools')\nimport swapi\nfor nm in ['Q235','普通碳钢','碳钢','AISI 1020','1023 碳钢板 (SS)']:\n    ok, info, why = swapi.is_valid_material(nm)\n    print(repr(nm), ok, info.get('canonical') if info else None, info.get('density') if info else None, why)\n\"@ 2>&1 | Select-Object -Last 10"
+ },
+ {
+  "n": 33,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\build_square.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }"
+ },
+ {
+  "n": 34,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" drawing \"__HOME__\\Desktop\\dsh\\DSH_正方形.sldprt\" 2>&1 | Select-Object -Last 40"
+ },
+ {
+  "n": 35,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n# 关掉挡在前面的 SOLIDWORKS CAM 消息窗口\nAdd-Type @\"\nusing System;using System.Runtime.InteropServices;\npublic class W { [DllImport(\"user32.dll\",CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(string c,string n);\n[DllImport(\"user32.dll\")] public static extern bool PostMessage(IntPtr h,uint m,IntPtr w,IntPtr l); }\n\"@\n$h=[W]::FindWindow($null,\"SOLIDWORKS CAM 消息窗口\")\nif ($h -ne [IntPtr]::Zero) { [W]::PostMessage($h,0x0010,[IntPtr]::Zero,[IntPtr]::Zero) | Out-Null; \"CAM window closed\" } else { \"no CAM window\" }\nStart-Sleep 2\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\probe_views.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }"
+ },
+ {
+  "n": 36,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\probe_views.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }"
+ },
+ {
+  "n": 37,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "Get-ChildItem \"__HOME__\\Desktop\\dsh\\DSH_正方形.*\" | Select-Object Name,Length,LastWriteTime | Format-Table -AutoSize | Out-String -Width 120\n$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n& $PY -c @\"\nimport win32com.client\nsw = win32com.client.Dispatch('SldWorks.Application')\ndocs = sw.GetDocuments\nprint('NDOCS', len(docs) if docs else 0)\nfor d in (docs or []):\n    try: print('  doc:', d.GetTitle, '|', d.GetPathName, '| type', d.GetType)\n    except Exception as e: print('  docERR', e)\n\"@ 2>&1 | Select-Object -Last 12"
+ },
+ {
+  "n": 38,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\probe_views.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }"
+ },
+ {
+  "n": 39,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\probe_views.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }"
+ },
+ {
+  "n": 40,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\probe_views2.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }"
+ },
+ {
+  "n": 41,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\probe_views3.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }"
+ },
+ {
+  "n": 42,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\probe_views4.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }"
+ },
+ {
+  "n": 43,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\set_layout.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }"
+ },
+ {
+  "n": 44,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\probe_views4.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout }"
+ },
+ {
+  "n": 45,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\set_layout2.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }"
+ },
+ {
+  "n": 46,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" annotate \"__HOME__\\Desktop\\dsh\\DSH_正方形.slddrw\" 2>&1 | Select-Object -Last 20"
+ },
+ {
+  "n": 47,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" title-block \"__HOME__\\Desktop\\dsh\\DSH_正方形.slddrw\" \"材料=普通碳钢\" \"比例=1:1\" \"图号=DSH-001\" \"设计者=DSH\" 2>&1 | Select-Object -Last 25"
+ },
+ {
+  "n": 48,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" dwg \"__HOME__\\Desktop\\dsh\\DSH_正方形.sldprt\" 2>&1 | Select-Object -Last 18\n\"=== PDF ===\"\n& $PY \"$R\\tools\\sw_bridge.py\" export-pdf \"__HOME__\\Desktop\\dsh\\DSH_正方形.slddrw\" 2>&1 | Select-Object -Last 10"
+ },
+ {
+  "n": 49,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" status 2>&1 | Select-Object -Last 6\n& $PY \"$R\\tools\\sw_bridge.py\" show 2>&1 | Select-Object -Last 12"
+ },
+ {
+  "n": 50,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n& $PY \"__HOME__\\Desktop\\dsh\\_tools\\close_cam.py\" 2>&1 | Select-Object -Last 25"
+ },
+ {
+  "n": 51,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$env:PYTHONIOENCODING=\"utf-8\"\n& $PY \"__HOME__\\Desktop\\dsh\\_tools\\close_cam.py\" 2>&1 | Select-Object -Last 20"
+ },
+ {
+  "n": 52,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" show 2>&1 | Select-Object -Last 12"
+ },
+ {
+  "n": 53,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\check_dims.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }\n\"=== DXF ===\"\n& $PY \"$R\\tools\\sw_bridge.py\" dxf \"__HOME__\\Desktop\\dsh\\DSH_正方形.slddrw\" 2>&1 | Select-Object -Last 8"
+ },
+ {
+  "n": 54,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\check_dims2.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }"
+ },
+ {
+  "n": 55,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\check_part_dims.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }"
+ },
+ {
+  "n": 56,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\build_square2.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }"
+ },
+ {
+  "n": 57,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\probe_dim_api.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }"
+ },
+ {
+  "n": 58,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\build_square3.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }"
+ },
+ {
+  "n": 59,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\build_square4.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }"
+ },
+ {
+  "n": 60,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\probe_dim_api2.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }"
+ },
+ {
+  "n": 61,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tools\\build_square5.py\" 2>&1 | ConvertFrom-Json | ForEach-Object { $_.script_stdout; \"OK=$($_.ok) ERR=$($_.error)\" }"
+ },
+ {
+  "n": 62,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$L=\"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:DSH_SW_EXE=\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$R=\"__HOME__\\.dsh\\.agent-presets\\engineering\"\n& $PY \"$R\\tools\\sw_bridge.py\" close-all 2>&1 | Select-Object -Last 12\nStart-Sleep 5\n$p = Get-Process SLDWORKS -ErrorAction SilentlyContinue\nif ($p) { \"SW_STILL_RUNNING pid=$($p.Id)\" } else { \"SW_CLOSED\" }"
+ },
+ {
+  "n": 63,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$WS=\"__HOME__\\Desktop\\dsh\"\n$L=\"$WS\\_tools\\pylibs\"\n$env:PYTHONPATH=\"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH=\"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING=\"utf-8\"\n$PY=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n& $PY \"$WS\\_tools\\scripts\\环境\\verify_workspace.py\" 2>&1"
+ },
+ {
+  "n": 64,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$env:DSH_ENGINEERING_ROOT = \"__HOME__\\.dsh\\.agent-presets\\engineering\"\n$PY = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$L  = \"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH = \"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH = \"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING = \"utf-8\"\n& $PY \"__HOME__\\.dsh\\.agent-presets\\engineering\\tools\\mode_gate.py\" residue-check --clean"
+ },
+ {
+  "n": 65,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$env:DSH_ENGINEERING_ROOT = \"__HOME__\\.dsh\\.agent-presets\\engineering\"\n$PY = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$L  = \"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH = \"$L;$L\\win32;$L\\win32\\lib\"\n$env:PATH = \"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING = \"utf-8\"\n& $PY \"__HOME__\\.dsh\\.agent-presets\\engineering\\tools\\workflow_gate.py\" init \"设计一台三自由度机械臂：底座回转 + 大臂俯仰 + 小臂俯仰，含腕部夹爪的多零件装配体\""
+ },
+ {
+  "n": 66,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$env:DSH_ENGINEERING_ROOT = \"__HOME__\\.dsh\\.agent-presets\\engineering\"\n$PY = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$L  = \"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH = \"$L;$L\\win32;$L\\win32\\lib\"; $env:PATH = \"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING = \"utf-8\"\n& $PY \"__HOME__\\.dsh\\.agent-presets\\engineering\\tools\\workflow_gate.py\" work-dir \"__HOME__\\Desktop\\dsh\\产出\\机械设计\\DSH_三自由度机械臂\""
+ },
+ {
+  "n": 67,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$env:DSH_ENGINEERING_ROOT = \"__HOME__\\.dsh\\.agent-presets\\engineering\"\n$PY = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$L  = \"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH = \"$L;$L\\win32;$L\\win32\\lib\"; $env:PATH = \"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING = \"utf-8\"\n& $PY \"__HOME__\\.dsh\\.agent-presets\\engineering\\tools\\workflow_gate.py\" provide_context \"并行策略选 D（部分小屋并行，按波次分批启动）；搭建方式选 B（部分自主搭建，关键节点询问）\""
+ },
+ {
+  "n": 68,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$env:DSH_ENGINEERING_ROOT = \"__HOME__\\.dsh\\.agent-presets\\engineering\"\n$PY = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$L  = \"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH = \"$L;$L\\win32;$L\\win32\\lib\"; $env:PATH = \"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING = \"utf-8\"\n& $PY \"__HOME__\\.dsh\\.agent-presets\\engineering\\tools\\workflow_gate.py\" provide_context \"强需求：需要严格校核，参数要有设计依据（载荷/尺寸/公差/材料都要有据可依），允许按需提问 10~50 题\""
+ },
+ {
+  "n": 69,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$env:DSH_ENGINEERING_ROOT = \"__HOME__\\.dsh\\.agent-presets\\engineering\"\n$PY = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$L  = \"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH = \"$L;$L\\win32;$L\\win32\\lib\"; $env:PATH = \"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING = \"utf-8\"\n$T = \"__HOME__\\.dsh\\.agent-presets\\engineering\\tools\"\n& $PY \"$T\\workflow_gate.py\" mode2 begin-stage TaskUnderstanding\n& $PY \"$T\\workflow_gate.py\" stage-status"
+ },
+ {
+  "n": 70,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$env:DSH_ENGINEERING_ROOT = \"__HOME__\\.dsh\\.agent-presets\\engineering\"\n$PY = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$L  = \"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH = \"$L;$L\\win32;$L\\win32\\lib\"; $env:PATH = \"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING = \"utf-8\"\n& $PY \"__HOME__\\.dsh\\.agent-presets\\engineering\\tools\\mode2_flow.py\" --help 2>&1 | head -40"
+ },
+ {
+  "n": 71,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$env:DSH_ENGINEERING_ROOT = \"__HOME__\\.dsh\\.agent-presets\\engineering\"\n$PY = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$L  = \"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH = \"$L;$L\\win32;$L\\win32\\lib\"; $env:PATH = \"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING = \"utf-8\"\n& $PY \"__HOME__\\.dsh\\.agent-presets\\engineering\\tools\\mode2_flow.py\" --help 2>&1 | Select-Object -First 45"
+ },
+ {
+  "n": 72,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$T = \"__HOME__\\.dsh\\.agent-presets\\engineering\\tools\"\nGet-ChildItem $T -Filter \"*.json\" | Where-Object { $_.Name -match \"stage|flow|mode2|question\" } | Select-Object Name, Length, LastWriteTime"
+ },
+ {
+  "n": 73,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$env:DSH_ENGINEERING_ROOT = \"__HOME__\\.dsh\\.agent-presets\\engineering\"\n$PY = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$L  = \"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH = \"$L;$L\\win32;$L\\win32\\lib\"; $env:PATH = \"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING = \"utf-8\"\n$T = \"__HOME__\\.dsh\\.agent-presets\\engineering\\tools\"\n& $PY \"$T\\mode2_flow.py\" begin-stage --help 2>&1\nWrite-Host \"===== ask help =====\"\n& $PY \"$T\\mode2_flow.py\" ask --help 2>&1"
+ },
+ {
+  "n": 74,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$env:DSH_ENGINEERING_ROOT = \"__HOME__\\.dsh\\.agent-presets\\engineering\"\n$PY = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$L  = \"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH = \"$L;$L\\win32;$L\\win32\\lib\"; $env:PATH = \"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING = \"utf-8\"\n$T = \"__HOME__\\.dsh\\.agent-presets\\engineering\\tools\"\n$WD = \"__HOME__\\Desktop\\dsh\\产出\\机械设计\\DSH_三自由度机械臂\"\n& $PY \"$T\\workflow_gate.py\" mode2 begin-stage TaskUnderstanding --work-dir $WD"
+ },
+ {
+  "n": 75,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$env:DSH_ENGINEERING_ROOT = \"__HOME__\\.dsh\\.agent-presets\\engineering\"\n$PY = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$L  = \"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH = \"$L;$L\\win32;$L\\win32\\lib\"; $env:PATH = \"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING = \"utf-8\"\n& $PY \"__HOME__\\.dsh\\.agent-presets\\engineering\\tools\\workflow_gate.py\" --help 2>&1 | Select-Object -First 40"
+ },
+ {
+  "n": 76,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$env:DSH_ENGINEERING_ROOT = \"__HOME__\\.dsh\\.agent-presets\\engineering\"\n$PY = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$L  = \"__HOME__\\Desktop\\dsh\\_tools\\pylibs\"\n$env:PYTHONPATH = \"$L;$L\\win32;$L\\win32\\lib\"; $env:PATH = \"$L\\pywin32_system32;$env:PATH\"\n$env:PYTHONIOENCODING = \"utf-8\"\n$T = \"__HOME__\\.dsh\\.agent-presets\\engineering\\tools\"\n& $PY \"$T\\workflow_gate.py\" reset\nWrite-Host \"===== status after reset =====\"\n& $PY \"$T\\workflow_gate.py\" status"
+ },
+ {
+  "n": 77,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$cands = @(\"D:\\dsh guanfnag\\resources\\runtime\\cli\\bin\\dsh.cmd\",\"D:\\dsh guanfnag\\resources\\runtime\\cli\\bin\\dsh.exe\")\nforeach ($c in $cands) { if (Test-Path $c) { \"FOUND: $c\" } }\nWrite-Host \"=== npm registry check ===\"\ntry {\n  $r = Invoke-RestMethod -Uri \"https://registry.npmjs.org/dsh-auto-approval-plugin\" -TimeoutSec 25\n  \"name: \" + $r.name\n  \"latest: \" + $r.'dist-tags'.latest\n  \"desc: \" + $r.description\n  \"modified: \" + $r.time.modified\n} catch { \"npm query failed: \" + $_.Exception.Message }"
+ },
+ {
+  "n": 78,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$dsh = \"D:\\dsh guanfnag\\resources\\runtime\\cli\\bin\\dsh.cmd\"\n& $dsh plugin add --help 2>&1 | Select-Object -First 40"
+ },
+ {
+  "n": 79,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$dsh = \"D:\\dsh guanfnag\\resources\\runtime\\cli\\bin\\dsh.cmd\"\n& $dsh plugin add --profile desktop --help 2>&1 | Select-Object -First 40\nWrite-Host \"=== current patch backup ===\"\nCopy-Item \"__HOME__\\.dsh\\profiles\\desktop\\cordis.patch.yml\" \"__HOME__\\.dsh\\profiles\\desktop\\cordis.patch.yml.bak-before-autoapproval-$(Get-Date -Format yyyyMMdd-HHmmss)\"\nGet-ChildItem \"__HOME__\\.dsh\\profiles\\desktop\\cordis.patch.yml*\" | Select-Object Name, Length"
+ },
+ {
+  "n": 80,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$dsh = \"D:\\dsh guanfnag\\resources\\runtime\\cli\\bin\\dsh.cmd\"\n& $dsh plugin --profile desktop add dsh-auto-approval-plugin 2>&1 | Select-Object -Last 40"
+ },
+ {
+  "n": 81,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$pkgs = @(\"dsh-auto-approval-plugin\",\"@dnalec/dsh-auto-approve\",\"dsh-auto-reviewer\",\"@mrweicodes/dsh-permgate\",\"@dsh-plugin/dsh-approve-for-me\")\nforeach ($p in $pkgs) {\n  $u = \"https://registry.npmjs.org/\" + ($p -replace \"/\",\"%2F\")\n  try {\n    $r = Invoke-RestMethod -Uri $u -TimeoutSec 25\n    $latest = $r.'dist-tags'.latest\n    $v = $r.versions.$latest\n    \"== $p  latest=$latest  modified=$($r.time.modified)\"\n    \"   desc: $($v.description)\"\n    $req = $v.dependencies, $v.peerDependencies, $v.dsh\n    \"   dsh field: \" + ($v.dsh | ConvertTo-Json -Compress -Depth 4)\n    \"   peerDeps: \" + ($v.peerDependencies | ConvertTo-Json -Compress -Depth 4)\n    \"   deps: \" + ($v.dependencies | ConvertTo-Json -Compress -Depth 4)\n  } catch { \"== $p  FAILED: $($_.Exception.Message)\" }\n}"
+ },
+ {
+  "n": 82,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$dsh = \"D:\\dsh guanfnag\\resources\\runtime\\cli\\bin\\dsh.cmd\"\n& $dsh plugin --profile desktop add @mrweicodes/dsh-permgate 2>&1 | Select-Object -Last 30"
+ },
+ {
+  "n": 83,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$cfg = \"__HOME__\\.dsh\\dsh-permgate\\config.json\"\nCopy-Item $cfg \"$cfg.bak-before-whitelist-$(Get-Date -Format yyyyMMdd-HHmmss)\"\n$py = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n$code = @'\nimport json, io, random, string\np = r\"__HOME__\\.dsh\\dsh-permgate\\config.json\"\nd = json.load(io.open(p, encoding=\"utf-8\"))\ng = d.setdefault(\"global\", {})\ndef rid():\n    return \"e\" + \"\".join(random.choice(string.ascii_lowercase + string.digits) for _ in range(6))\n\nENG = r\"__HOME__\\.dsh\\.agent-presets\\engineering\\**\"\nWS  = r\"__HOME__\\Desktop\\dsh\\**\"\nSW  = r\"D:\\SolidWorks 2026\\**\"\n\ndef add_path(cat, path):\n    c = g.setdefault(cat, {\"mode\": \"ask\", \"exceptions\": []})\n    c.setdefault(\"exceptions\", [])\n    if not any(e.get(\"path\") == path for e in c[\"exceptions\"]):\n        c[\"exceptions\"].append({\"id\": rid(), \"action\": \"allow\", \"path\": path})\n\nadd_path(\"edit\", ENG); add_path(\"edit\", WS)\nadd_path(\"directory\", ENG); add_path(\"directory\", SW)\nadd_path(\"read\", ENG)\n\nc = g.setdefault(\"command\", {\"mode\": \"ask\", \"exceptions\": []})\nc.setdefault(\"exceptions\", [])\nfor pat in [\"*workflow_gate.py*\", \"*mode_gate.py*\", \"*mode2_flow.py*\",\n            \"*sw_bridge.py*\", \"*defense_gate.py*\", \"*physics_bridge.py*\",\n            \"*visual_check.py*\", \"*swapi.py*\", \"*ask_user.py*\"]:\n    if not any(e.get(\"match\") == pat for e in c[\"exceptions\"]):\n        c[\"exceptions\"].append({\"id\": rid(), \"action\": \"allow\", \"match\": pat})\n\njson.dump(d, io.open(p, \"w\", encoding=\"utf-8\"), ensure_ascii=False, indent=2)\nprint(\"ok, exceptions written\")\n'@\n$tmp = \"$env:TEMP\\_pg_cfg.py\"; Set-Content -Path $tmp -Value $code -Encoding UTF8\n& $py $tmp"
+ },
+ {
+  "n": 84,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "rejected",
+  "command": "try {\n  $r = Invoke-RestMethod -Uri \"http://127.0.0.1:58073/permgate/reload\" -Method Post -TimeoutSec 20\n  $r | ConvertTo-Json -Depth 4 -Compress\n} catch {\n  \"POST failed: \" + $_.Exception.Message\n  try { (Invoke-RestMethod -Uri \"http://127.0.0.1:58073/permgate/reload\" -TimeoutSec 15) | ConvertTo-Json -Depth 4 -Compress } catch { \"GET also failed: \" + $_.Exception.Message }\n}"
+ },
+ {
+  "n": 85,
+  "preset": "engineering",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$dsh = \"D:\\dsh guanfnag\\resources\\runtime\\cli\\bin\\dsh.cmd\"\n& $dsh plugin --profile desktop list 2>&1 | Select-Object -First 40"
+ },
+ {
+  "n": 86,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$py=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n& $py -m pip install --no-cache-dir pywin32 2>&1 | Select-Object -Last 6\n& $py -c \"import pythoncom, win32com.client; print('pywin32 OK', pythoncom.__file__)\""
+ },
+ {
+  "n": 87,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$p = Start-Process \"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\" -PassThru\n\"pid=$($p.Id)\"\nStart-Sleep -Seconds 90\n$proc = Get-Process -Id $p.Id -ErrorAction SilentlyContinue\nif ($proc) {\n  \"ALIVE ws=$([math]::Round($proc.WorkingSet64/1MB))MB\"\n  Get-Process | Where-Object { $_.Path -match \"SolidWorks\" } | Select-Object Id,ProcessName | Format-Table\n} else { \"CRTASHED again\" }"
+ },
+ {
+  "n": 88,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$py=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n& $py \"__HOME__\\.dsh\\.agent-presets\\engineering\\tools\\sw_bridge.py\" status 2>&1 | Select-Object -First 40"
+ },
+ {
+  "n": 89,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "rejected",
+  "command": "$py=\"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\n& $py \"__HOME__\\.dsh\\.agent-presets\\engineering\\tools\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\build_l_bracket.py\" 2>&1 | Select-Object -Last 60"
+ },
+ {
+  "n": 90,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$target = 'D:\\DSH Desktop'\nWrite-Output \"=== 删除前最终核对 ===\"\n\"绝对路径解析 = {0}\" -f (Resolve-Path -LiteralPath $target).Path\n\"与已删官方安装同哈希的 exe 仍在 = {0}\" -f (Test-Path -LiteralPath \"$target\\DSH Desktop.exe\")\n$s = Get-ChildItem -LiteralPath $target -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Sum Length\n\"内容 = {0} 文件 / {1:N1} MB\" -f $s.Count, ($s.Sum/1MB)\nWrite-Output \"`n=== 引用复查（应无输出）===\"\n$sh = New-Object -ComObject WScript.Shell\nGet-ChildItem -Path '__HOME__\\Desktop','__HOME__\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu','C:\\ProgramData\\Microsoft\\Windows\\Start Menu' -Recurse -Filter '*.lnk' -Force -ErrorAction SilentlyContinue | ForEach-Object {\n  $sc = $sh.CreateShortcut($_.FullName)\n  if ($sc.TargetPath -like 'D:\\DSH Desktop*') { \"  引用: $($_.FullName) -> $($sc.TargetPath)\" }\n}\nGet-Process | Where-Object { $_.Path -like 'D:\\DSH Desktop*' } | Select-Object Id,ProcessName,Path | Format-Table -AutoSize\nWrite-Output \"(以上为空 = 无引用、无进程占用)\"\nWrite-Output \"`n=== 执行删除 ===\"\nRemove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop\nWrite-Output \"删除命令已返回，独立复核：\"\n\"D:\\DSH Desktop 仍存在 = {0}\" -f (Test-Path -LiteralPath $target)"
+ },
+ {
+  "n": 91,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$bin = '__HOME__\\AppData\\Roaming\\dsh-desktop\\harness\\.desktop-bin'\nWrite-Output \"=== 修复前 ===\"\nforeach ($f in @(\"$bin\\node.cmd\",\"$bin\\pnpm.cmd\")) { \"--- $f\"; Get-Content -LiteralPath $f -Raw }\n$node = 'C:\\Program Files\\nodejs\\node.exe'\n$nodeU8 = \"$bin\\node.cmd\"\n$pnpmU8 = \"$bin\\pnpm.cmd\"\n$n1 = \"@chcp 65001 >nul`r`n@echo off`r`n@set ELECTRON_RUN_AS_NODE=1`r`n`\"$node`\" %*`r`n\"\n$n2 = \"@chcp 65001 >nul`r`n@echo off`r`n@set ELECTRON_RUN_AS_NODE=1`r`n`\"$node`\" `\"$bin\\pnpm-runner.mjs`\" `\"D:\\dsh guanfnag\\resources\\runtime\\pnpm\\dist\\pnpm.mjs`\" %*`r`n\"\n[System.IO.File]::WriteAllText($nodeU8, $n1, (New-Object System.Text.UTF8Encoding($false)))\n[System.IO.File]::WriteAllText($pnpmU8, $n2, (New-Object System.Text.UTF8Encoding($false)))\nWrite-Output \"`n=== 修复后（读回验证）===\"\nforeach ($f in @($nodeU8,$pnpmU8)) { \"--- $f\"; Get-Content -LiteralPath $f -Raw }"
+ },
+ {
+  "n": 92,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$d = '__HOME__\\AppData\\Local\\dsh-desktop-updater'\nWrite-Output \"=== 删除前核对 ===\"\n\"绝对路径 = {0}\" -f (Resolve-Path -LiteralPath $d).Path\nGet-ChildItem -Force $d | Select-Object Name,Length,LastWriteTime | Format-Table -AutoSize\n$s = Get-ChildItem -LiteralPath $d -Recurse -Force -File | Measure-Object -Sum Length\n\"内容 = {0} 文件 / {1:N1} MB\" -f $s.Count, ($s.Sum/1MB)\nWrite-Output \"占用进程检查（应为空）:\"\nGet-Process | Where-Object { $_.Path -like \"$d*\" } | Select-Object Id,ProcessName,Path | Format-Table -AutoSize\nWrite-Output \"=== 执行删除 ===\"\nRemove-Item -LiteralPath $d -Recurse -Force -ErrorAction Stop\n\"删除后仍存在 = {0}\" -f (Test-Path -LiteralPath $d)\nWrite-Output \"=== 确认 %APPDATA%\\dsh-desktop 未被动（用户选择保留）===\"\n\"__HOME__\\AppData\\Roaming\\dsh-desktop 存在 = {0}\" -f (Test-Path '__HOME__\\AppData\\Roaming\\dsh-desktop')\n\"C 盘可用空间 = {0:N1} GB\" -f ((Get-PSDrive C).Free/1GB)"
+ },
+ {
+  "n": 93,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "Write-Output \"=== 确认自带 node 可用 ===\"\n$node = 'D:\\dsh guanfnag\\resources\\runtime\\primary-runtime\\dependencies\\node\\bin\\node.exe'\n& $node --version\nWrite-Output \"=== runtime 清单版本 ===\"\nGet-Content -LiteralPath 'D:\\dsh guanfnag\\resources\\runtime\\versions.json' -Raw -ErrorAction SilentlyContinue\nGet-Content -LiteralPath 'D:\\dsh guanfnag\\resources\\runtime\\primary-runtime\\runtime.json' -Raw -ErrorAction SilentlyContinue | Select-Object -First 1\nWrite-Output \"`n=== 重新指向 .desktop-bin（改用自带 v24.21.0）===\"\n$bin = '__HOME__\\AppData\\Roaming\\dsh-desktop\\harness\\.desktop-bin'\n$n1 = \"@chcp 65001 >nul`r`n@echo off`r`n@set ELECTRON_RUN_AS_NODE=1`r`n`\"$node`\" %*`r`n\"\n$n2 = \"@chcp 65001 >nul`r`n@echo off`r`n@set ELECTRON_RUN_AS_NODE=1`r`n`\"$node`\" `\"$bin\\pnpm-runner.mjs`\" `\"D:\\dsh guanfnag\\resources\\runtime\\pnpm\\dist\\pnpm.mjs`\" %*`r`n\"\n[System.IO.File]::WriteAllText(\"$bin\\node.cmd\", $n1, (New-Object System.Text.UTF8Encoding($false)))\n[System.IO.File]::WriteAllText(\"$bin\\pnpm.cmd\", $n2, (New-Object System.Text.UTF8Encoding($false)))\nWrite-Output \"--- 读回 node.cmd\"; Get-Content -LiteralPath \"$bin\\node.cmd\" -Raw\nWrite-Output \"--- 读回 pnpm.cmd\"; Get-Content -LiteralPath \"$bin\\pnpm.cmd\" -Raw\nWrite-Output \"=== 实测 node.cmd ===\"\n& cmd.exe /c \"`\"$bin\\node.cmd`\" --version\""
+ },
+ {
+  "n": 94,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "& powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File '__HOME__\\Desktop\\dsh\\工具包\\编码工具.ps1' -ToBom '__HOME__\\Desktop\\dsh\\_tools\\merge-profile.ps1' 2>&1 | Out-String\n& powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File '__HOME__\\Desktop\\dsh\\_tools\\merge-profile.ps1' 2>&1 | Out-String"
+ },
+ {
+  "n": 95,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$node = 'D:\\dsh guanfnag\\resources\\runtime\\primary-runtime\\dependencies\\node\\bin\\node.exe'\n$pnpm = 'D:\\dsh guanfnag\\resources\\runtime\\pnpm\\dist\\pnpm.mjs'\n$dir  = '__HOME__\\.dsh\\profiles\\desktop'\nWrite-Output \"=== 前置检查 ===\"\n\"node  = {0}  ({1})\" -f (Test-Path $node), (& $node --version)\n\"pnpm  = {0}\" -f (Test-Path $pnpm)\n\"目录  = {0}\" -f (Test-Path $dir)\nWrite-Output \"`n=== 开始安装（pnpm install，hoisted）===\"\n$sw = [System.Diagnostics.Stopwatch]::StartNew()\n& $node $pnpm install --dir $dir 2>&1 | Select-Object -Last 40\n$sw.Stop()\nWrite-Output (\"`n=== 退出码 = {0}   耗时 = {1:N1} 秒 ===\" -f $LASTEXITCODE, $sw.Elapsed.TotalSeconds)"
+ },
+ {
+  "n": 96,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$target = 'D:\\DSH Desktop'\nWrite-Output \"=== 删除前最终核对 ===\"\n\"绝对路径解析 = {0}\" -f (Resolve-Path -LiteralPath $target).Path\n\"与已删官方安装同哈希的 exe 仍在 = {0}\" -f (Test-Path -LiteralPath \"$target\\DSH Desktop.exe\")\n$s = Get-ChildItem -LiteralPath $target -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object -Sum Length\n\"内容 = {0} 文件 / {1:N1} MB\" -f $s.Count, ($s.Sum/1MB)\nWrite-Output \"`n=== 引用复查（应无输出）===\"\n$sh = New-Object -ComObject WScript.Shell\nGet-ChildItem -Path '__HOME__\\Desktop','__HOME__\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu','C:\\ProgramData\\Microsoft\\Windows\\Start Menu' -Recurse -Filter '*.lnk' -Force -ErrorAction SilentlyContinue | ForEach-Object {\n  $sc = $sh.CreateShortcut($_.FullName)\n  if ($sc.TargetPath -like 'D:\\DSH Desktop*') { \"  引用: $($_.FullName) -> $($sc.TargetPath)\" }\n}\nGet-Process | Where-Object { $_.Path -like 'D:\\DSH Desktop*' } | Select-Object Id,ProcessName,Path | Format-Table -AutoSize\nWrite-Output \"(以上为空 = 无引用、无进程占用)\"\nWrite-Output \"`n=== 执行删除 ===\"\nRemove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop\nWrite-Output \"删除命令已返回，独立复核：\"\n\"D:\\DSH Desktop 仍存在 = {0}\" -f (Test-Path -LiteralPath $target)"
+ },
+ {
+  "n": 97,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$bin = '__HOME__\\AppData\\Roaming\\dsh-desktop\\harness\\.desktop-bin'\nWrite-Output \"=== 修复前 ===\"\nforeach ($f in @(\"$bin\\node.cmd\",\"$bin\\pnpm.cmd\")) { \"--- $f\"; Get-Content -LiteralPath $f -Raw }\n$node = 'C:\\Program Files\\nodejs\\node.exe'\n$nodeU8 = \"$bin\\node.cmd\"\n$pnpmU8 = \"$bin\\pnpm.cmd\"\n$n1 = \"@chcp 65001 >nul`r`n@echo off`r`n@set ELECTRON_RUN_AS_NODE=1`r`n`\"$node`\" %*`r`n\"\n$n2 = \"@chcp 65001 >nul`r`n@echo off`r`n@set ELECTRON_RUN_AS_NODE=1`r`n`\"$node`\" `\"$bin\\pnpm-runner.mjs`\" `\"D:\\dsh guanfnag\\resources\\runtime\\pnpm\\dist\\pnpm.mjs`\" %*`r`n\"\n[System.IO.File]::WriteAllText($nodeU8, $n1, (New-Object System.Text.UTF8Encoding($false)))\n[System.IO.File]::WriteAllText($pnpmU8, $n2, (New-Object System.Text.UTF8Encoding($false)))\nWrite-Output \"`n=== 修复后（读回验证）===\"\nforeach ($f in @($nodeU8,$pnpmU8)) { \"--- $f\"; Get-Content -LiteralPath $f -Raw }"
+ },
+ {
+  "n": 98,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$d = '__HOME__\\AppData\\Local\\dsh-desktop-updater'\nWrite-Output \"=== 删除前核对 ===\"\n\"绝对路径 = {0}\" -f (Resolve-Path -LiteralPath $d).Path\nGet-ChildItem -Force $d | Select-Object Name,Length,LastWriteTime | Format-Table -AutoSize\n$s = Get-ChildItem -LiteralPath $d -Recurse -Force -File | Measure-Object -Sum Length\n\"内容 = {0} 文件 / {1:N1} MB\" -f $s.Count, ($s.Sum/1MB)\nWrite-Output \"占用进程检查（应为空）:\"\nGet-Process | Where-Object { $_.Path -like \"$d*\" } | Select-Object Id,ProcessName,Path | Format-Table -AutoSize\nWrite-Output \"=== 执行删除 ===\"\nRemove-Item -LiteralPath $d -Recurse -Force -ErrorAction Stop\n\"删除后仍存在 = {0}\" -f (Test-Path -LiteralPath $d)\nWrite-Output \"=== 确认 %APPDATA%\\dsh-desktop 未被动（用户选择保留）===\"\n\"__HOME__\\AppData\\Roaming\\dsh-desktop 存在 = {0}\" -f (Test-Path '__HOME__\\AppData\\Roaming\\dsh-desktop')\n\"C 盘可用空间 = {0:N1} GB\" -f ((Get-PSDrive C).Free/1GB)"
+ },
+ {
+  "n": 99,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "Write-Output \"=== 确认自带 node 可用 ===\"\n$node = 'D:\\dsh guanfnag\\resources\\runtime\\primary-runtime\\dependencies\\node\\bin\\node.exe'\n& $node --version\nWrite-Output \"=== runtime 清单版本 ===\"\nGet-Content -LiteralPath 'D:\\dsh guanfnag\\resources\\runtime\\versions.json' -Raw -ErrorAction SilentlyContinue\nGet-Content -LiteralPath 'D:\\dsh guanfnag\\resources\\runtime\\primary-runtime\\runtime.json' -Raw -ErrorAction SilentlyContinue | Select-Object -First 1\nWrite-Output \"`n=== 重新指向 .desktop-bin（改用自带 v24.21.0）===\"\n$bin = '__HOME__\\AppData\\Roaming\\dsh-desktop\\harness\\.desktop-bin'\n$n1 = \"@chcp 65001 >nul`r`n@echo off`r`n@set ELECTRON_RUN_AS_NODE=1`r`n`\"$node`\" %*`r`n\"\n$n2 = \"@chcp 65001 >nul`r`n@echo off`r`n@set ELECTRON_RUN_AS_NODE=1`r`n`\"$node`\" `\"$bin\\pnpm-runner.mjs`\" `\"D:\\dsh guanfnag\\resources\\runtime\\pnpm\\dist\\pnpm.mjs`\" %*`r`n\"\n[System.IO.File]::WriteAllText(\"$bin\\node.cmd\", $n1, (New-Object System.Text.UTF8Encoding($false)))\n[System.IO.File]::WriteAllText(\"$bin\\pnpm.cmd\", $n2, (New-Object System.Text.UTF8Encoding($false)))\nWrite-Output \"--- 读回 node.cmd\"; Get-Content -LiteralPath \"$bin\\node.cmd\" -Raw\nWrite-Output \"--- 读回 pnpm.cmd\"; Get-Content -LiteralPath \"$bin\\pnpm.cmd\" -Raw\nWrite-Output \"=== 实测 node.cmd ===\"\n& cmd.exe /c \"`\"$bin\\node.cmd`\" --version\""
+ },
+ {
+  "n": 100,
+  "preset": "standard",
+  "tool": "write",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": null
+ },
+ {
+  "n": 101,
+  "preset": "standard",
+  "tool": "write",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": null
+ },
+ {
+  "n": 102,
+  "preset": "standard",
+  "tool": "edit",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": null
+ },
+ {
+  "n": 103,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$src='__HOME__\\.dsh\\skills\\assembly-orchestration\\SKILL.md'\n$fix='__HOME__\\Desktop\\dsh\\_tmp\\plugin-verify\\assembly-orchestration.SKILL.fixed.md'\nCopy-Item $fix $src -Force\nWrite-Output ('已修复 安装副本 -> ' + $src)\nWrite-Output ('  size = ' + (Get-Item $src).Length + ' bytes')"
+ },
+ {
+  "n": 104,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "Write-Output '=== WER 崩溃报告 ==='\nGet-ChildItem \"$env:LOCALAPPDATA\\Microsoft\\Windows\\WER\\ReportArchive\",\"$env:LOCALAPPDATA\\Microsoft\\Windows\\WER\\ReportQueue\",\"$env:PROGRAMDATA\\Microsoft\\Windows\\WER\\ReportArchive\" -Directory -ErrorAction SilentlyContinue |\n  Where-Object { $_.Name -match 'SLDWORKS|AppCrash' } | Sort-Object LastWriteTime -Descending | Select-Object -First 3 FullName, LastWriteTime | Format-Table -AutoSize -Wrap\n$r = Get-ChildItem \"$env:LOCALAPPDATA\\Microsoft\\Windows\\WER\" -Recurse -Filter 'Report.wer' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1\nif ($r) { Write-Output (\"--- \" + $r.FullName); Get-Content $r.FullName -TotalCount 40 }\nWrite-Output ''\nWrite-Output '=== 启动 SW（full access）==='\nStart-Process -FilePath 'D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe'\n$deadline=(Get-Date).AddSeconds(200); $ready=$false\nwhile((Get-Date) -lt $deadline){\n  $p = Get-Process SLDWORKS -ErrorAction SilentlyContinue\n  if($p){\n    $main = $p | Where-Object { $_.MainWindowHandle -ne 0 }\n    if($main){ Write-Output (\"READY pid=\" + $main.Id + \" title=\" + $main.MainWindowTitle); $ready=$true; break }\n    Write-Output (\"启动中... pids=\" + (($p | ForEach-Object { $_.Id }) -join ','))\n  } else { Write-Output '等待进程...' }\n  Start-Sleep -Seconds 10\n}\nif(-not $ready){ Write-Output '超时或崩溃' }"
+ },
+ {
+  "n": 105,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$T='__HOME__\\.dsh\\.agent-presets\\engineering\\tools'\nWrite-Output '=== 连接状态（full access）==='\npython \"$T\\sw_bridge.py\" status 2>&1 | Select-Object -First 25"
+ },
+ {
+  "n": 106,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$T='__HOME__\\.dsh\\.agent-presets\\engineering\\tools'\n$out = python \"$T\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tmp\\plugin-verify\\verify_build.py\" --room \"装机验收\" 2>&1\n$out | Select-Object -Last 120"
+ },
+ {
+  "n": 107,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$T='__HOME__\\.dsh\\.agent-presets\\engineering\\tools'\nWrite-Output '=== 当前 SW 里打开的文档 ==='\npython \"$T\\sw_bridge.py\" status 2>&1 | Select-Object -First 20\nWrite-Output ''\nWrite-Output '=== show（置前+截图）==='\npython \"$T\\sw_bridge.py\" show 2>&1 | Select-Object -Last 40"
+ },
+ {
+  "n": 108,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$T='__HOME__\\.dsh\\.agent-presets\\engineering\\tools'\npython \"$T\\sw_bridge.py\" run \"__HOME__\\Desktop\\dsh\\_tmp\\plugin-verify\\retry_shot.py\" --room \"装机验收\" 2>&1 |\n  Select-String -Pattern 'screenshot|title|ok|error|path|size|activated|verified' | Select-Object -First 40"
+ },
+ {
+  "n": 109,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$py = Join-Path $env:TEMP 'restore_sw.py'\n@\"\nimport ctypes\nfrom ctypes import wintypes\nu = ctypes.windll.user32\npid_target = 25436\nfound = []\nEnumProc = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)\ndef cb(h, l):\n    pid = wintypes.DWORD()\n    u.GetWindowThreadProcessId(h, ctypes.byref(pid))\n    if pid.value == pid_target and u.IsWindowVisible(h):\n        n = u.GetWindowTextLengthW(h)\n        buf = ctypes.create_unicode_buffer(n + 1)\n        u.GetWindowTextW(h, buf, n + 1)\n        t = buf.value\n        if '[' in t and ']' in t:\n            found.append((h, t))\n    return True\nu.EnumWindows(EnumProc(cb), 0)\nfor h, t in found:\n    print('document window hwnd=%d title=%s iconic=%s' % (h, t, bool(u.IsIconic(h))))\n    u.ShowWindow(h, 9)\n    u.ShowWindow(h, 3)\n    u.SetForegroundWindow(h)\n    print('  -> restored + maximized + foregrounded')\n\"@ | Set-Content -Path $py -Encoding UTF8\npython $py\nRemove-Item $py -Force\nStart-Sleep -Seconds 3\nWrite-Output ''\nWrite-Output '=== 恢复后重新截图 ==='\n$T='__HOME__\\.dsh\\.agent-presets\\engineering\\tools'\npython \"$T\\sw_bridge.py\" show 2>&1 | Select-String -Pattern 'ok|path|size|window_title|verified' | Select-Object -First 15"
+ },
+ {
+  "n": 110,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "Write-Output \"try explorer launch\"; Start-Process -FilePath \"explorer.exe\" -ArgumentList '\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"'; Start-Sleep -Seconds 40; Write-Output \"--- procs ---\"; (Get-Process | Where-Object {$_.ProcessName -match \"SLDWORKS|sldworks\"} | Select-Object Id,ProcessName | Out-String -Width 200); Write-Output \"DONE\""
+ },
+ {
+  "n": 111,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "Start-Process -FilePath \"explorer.exe\" -ArgumentList '\"D:\\SolidWorks 2026\\SOLIDWORKS\\SLDWORKS.exe\"'\nWrite-Output \"launched\"\n$p = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"\nfor ($i=1; $i -le 12; $i++) {\n  Start-Sleep -Seconds 15\n  $n = (Get-Process -Name \"SLDWORKS\" -ErrorAction SilentlyContinue | Measure-Object).Count\n  Write-Output (\"t=\" + ($i*15) + \"s SLDWORKS_count=\" + $n)\n  if ($n -gt 0) {\n    $r = & $p -c @'\nimport sys, io\nsys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding=\"utf-8\", errors=\"replace\")\ntry:\n    import win32com.client as w\n    o = w.Dispatch(\"SldWorks.Application\")\n    print(\"COM_OK rev=\" + str(o.RevisionNumber()))\nexcept Exception as e:\n    print(\"COM_FAIL \" + repr(e)[:200])\n'@\n    Write-Output $r\n    if ($r -match \"COM_OK\") { Write-Output \"SUCCESS\"; break }\n  }\n}\nWrite-Output \"END\""
+ },
+ {
+  "n": 112,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$p = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"; & $p \"__HOME__\\Desktop\\dsh\\probe_sw.py\" 2>&1 | Out-String -Width 300"
+ },
+ {
+  "n": 113,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$p = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"; & $p \"__HOME__\\Desktop\\dsh\\build_part_from_drawing.py\" 2>&1 | Out-String -Width 300"
+ },
+ {
+  "n": 114,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$p = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"; & $p \"__HOME__\\Desktop\\dsh\\build_part_from_drawing.py\" 2>&1 | Out-String -Width 300"
+ },
+ {
+  "n": 115,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$p = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"; & $p \"__HOME__\\Desktop\\dsh\\shot_part.py\" 2>&1 | Out-String -Width 300"
+ },
+ {
+  "n": 116,
+  "preset": "standard",
+  "tool": "pwsh",
+  "escalation": "danger-full-access",
+  "outcome": "allowed-once",
+  "command": "$p = \"__HOME__\\.dsh\\dsh-runtimes\\dsh-primary-runtime\\dependencies\\python\\python.exe\"; & $p \"__HOME__\\Desktop\\dsh\\shot3.py\" 2>&1 | Out-String -Width 300"
+ }
+]

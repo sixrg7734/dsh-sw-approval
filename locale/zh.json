@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "SW 安全自动审批",
+    "description": "只在工程模式（engineering）会话里，对严格匹配白名单的 SolidWorks 建模命令自动放行 danger-full-access 提权；其它操作照常弹窗。支持 /swapproval status/off/on/log 与本地审计日志。"
+  }
+}

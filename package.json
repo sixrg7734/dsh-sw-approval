@@ -1,0 +1,50 @@
+{
+  "name": "dsh-sw-approval",
+  "version": "0.1.3",
+  "description": "Safe auto-approval plugin for SolidWorks modeling sessions in DeepSeek Harness: narrow allowlist for danger-full-access escalation, fail-closed to human approval for everything else.",
+  "license": "MIT",
+  "author": "dsh-sw-approval contributors",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "icon": "./icon.svg",
+  "files": [
+    "index.js",
+    "lib/",
+    "cordis.patch.yml",
+    "README.md",
+    "SECURITY.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "DESIGN.md",
+    "SECURITY-REVIEW.md",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": ">=22",
+    "dsh": ">=0.2.0-rc.1 <0.3.0"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "plugin",
+    "solidworks",
+    "approval",
+    "permissions",
+    "safety"
+  ],
+  "scripts": {
+    "test": "node --test --experimental-test-isolation=none test/policy.test.mjs test/plugin.test.mjs test/adversarial.test.mjs"
+  }
+}

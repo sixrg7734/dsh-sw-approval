@@ -1,0 +1,15 @@
+# dsh-sw-approval — SW 建模安全自动审批（宿主层 bundle 补丁）
+#
+# 只注册一个 Host 插件行；所有判定规则在 lib/policy.js，胶水在 index.js。
+# 默认只在 engineering（工程模式）会话生效；其它会话、其它工具、其它提权模式
+# 一律走正常人工审批（fail-closed）。
+#
+# 用户可在此 config 里覆盖任意子集；未写的字段由 lib/policy.js 的
+# normalizeConfig() 补默认值。修改后需重载 DSH（宿主补丁是进程级配置）。
+- insert:
+    - id: dsh-sw-approval
+      name: dsh-sw-approval
+      config:
+        enabled: true
+        presets:
+          - engineering
